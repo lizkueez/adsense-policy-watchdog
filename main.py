@@ -1,61 +1,55 @@
 import streamlit as st
 import pandas as pd
-from openai import OpenAI
+import openai
 import os
 
-st.set_page_config(
-    page_title="AdSense Policy Watchdog",
-    layout="wide"
-)
+# Load API key from secrets.toml
+openai.api_key = st.secrets["OPENAI_API_KEY"]
 
-st.title("🎯 AdSense Policy Watchdog — GPT-4o Compliance Scanner")
-st.markdown("Upload your ad CSV. We'll analyze each headline + message using GPT-4o and Google AdSense rules.")
+st.title("Ad Compliance Checker")
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
-uploaded_file = st.file_uploader("📄 Upload your ad CSV file", type="csv")
+def check_violation(headline, message):
+    prompt = f"""
+You are an ad compliance assistant. Your job is to determine whether the following headline and message violate advertising policies.
 
-if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
-    df.columns = df.columns.str.strip()
-
-    st.subheader("🧾 Detected Columns")
-    st.code(df.columns.tolist())
-
-    required_columns = ["Ad Creative Headline", "Ad CreativeMessage", "Search ROI"]
-
-    if all(col in df.columns for col in required_columns):
-        st.success("✅ CSV looks good! Scanning for violations...")
-
-        def check_policy_compliance(headline, message):
-            prompt = f"""You're an AdSense compliance expert. Analyze this ad content based on Google's AdSense policies.
 Headline: {headline}
 Message: {message}
-Does this violate any AdSense content policies? Respond clearly with 'Compliant' or 'Violation: <reason>'."""
 
-            try:
-                response = client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.2,
-                )
-                return response.choices[0].message.content.strip()
-            except Exception as e:
-                return f"Error: {str(e)}"
+Respond with one of the following:
+- OK if there’s nothing wrong
+- WARNING if something might be questionable
+- VIOLATION if it clearly violates ad policies
 
-        st.subheader("📋 Compliance Results")
-        results = []
+Provide a 1-sentence reason after your verdict.
+"""
 
-        for i, row in df.iterrows():
-            headline = row["Ad Creative Headline"]
-            message = row["Ad CreativeMessage"]
-            result = check_policy_compliance(headline, message)
-            results.append(result)
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return f"Error: {str(e)}"
 
-        df["GPT Result"] = results
-        st.dataframe(df[["Ad Creative Headline", "Ad CreativeMessage", "GPT Result"]])
+if uploaded_file:
+    df = pd.read_csv(uploaded_file)
+    st.success("CSV looks good! Scanning for violations...")
 
-    else:
-        st.error("❌ Your CSV must include: Ad Creative Headline, Ad Creative Message, and Search ROI")
+    results = []
+    for i, row in df.iterrows():
+        headline = row.get("Ad Creative Headline", "")
+        message = row.get("Ad CreativeMessage", "")
+        st.write(f"✔️ Scanning row {i+1}: {headline[:40]}...")  # Debug checkpoint
+        result = check_violation(headline, message)
+        results.append(result)
+
+    df["GPT Result"] = results
+
+    st.subheader("Compliance Results")
+    st.dataframe(df[["Ad Creative Headline", "Ad CreativeMessage", "GPT Result"]])
+
+    csv = df.to_csv(index=False).encode('utf-8')
+    st.download_button("📥 Download Results", data=csv, file_name="compliance_results.csv", mime="text/csv")
