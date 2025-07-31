@@ -18,15 +18,14 @@ Headline: {headline}
 Message: {message}
 
 Respond with one of the following:
-- OK if there’s nothing wrong
+- OK if there's nothing wrong
 - WARNING if something might be questionable
 - VIOLATION if it clearly violates ad policies
 
 Provide a 1-sentence reason after your verdict.
 """
-
     try:
-        response = openai.ChatCompletion.create(
+        response = openai.chat.completions.create(
             model="gpt-4",
             messages=[{"role": "user", "content": prompt}]
         )
@@ -42,14 +41,13 @@ if uploaded_file:
     for i, row in df.iterrows():
         headline = row.get("Ad Creative Headline", "")
         message = row.get("Ad CreativeMessage", "")
-        st.write(f"✔️ Scanning row {i+1}: {headline[:40]}...")  # Debug checkpoint
+        st.write(f"🧠 Scanning row {i+1}: {headline[:40]}...")  # Optional debug log
         result = check_violation(headline, message)
         results.append(result)
 
     df["GPT Result"] = results
-
     st.subheader("Compliance Results")
     st.dataframe(df[["Ad Creative Headline", "Ad CreativeMessage", "GPT Result"]])
 
-    csv = df.to_csv(index=False).encode('utf-8')
+    csv = df.to_csv(index=False).encode("utf-8")
     st.download_button("📥 Download Results", data=csv, file_name="compliance_results.csv", mime="text/csv")
